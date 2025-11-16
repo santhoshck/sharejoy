@@ -1,4 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
+import { verifyPassword, hashPassword, generateSalt } from './crypto';
 
 export type UserRecord = { username: string; salt: string; hash: string };
 
@@ -29,6 +30,37 @@ export async function addUser(user: UserRecord): Promise<void> {
 export async function getUser(username: string): Promise<UserRecord | null> {
   const users = await getUsers();
   return users[username] ?? null;
+}
+
+export async function updateUser(user: UserRecord): Promise<void> {
+  const users = await getUsers();
+  users[user.username] = user;
+  await saveUsers(users);
+}
+
+// change user's password after verifying currentPassword; throws on failure
+export async function changeUserPassword(username: string, currentPassword: string, newPassword: string): Promise<void> {
+  const user = await getUser(username);
+  if (!user) throw new Error('User not found');
+  const ok = verifyPassword(currentPassword, user.salt, user.hash);
+  if (!ok) throw new Error('Current password incorrect');
+  const newSalt = await generateSalt();
+  const newHash = hashPassword(newPassword, newSalt);
+  user.salt = newSalt;
+  user.hash = newHash;
+  await updateUser(user);
+}
+
+export async function deleteUser(username: string): Promise<void> {
+  const users = await getUsers();
+  if (users[username]) {
+    delete users[username];
+    await saveUsers(users);
+  }
+  const current = await getCurrentUser();
+  if (current === username) {
+    await removeCurrentUser();
+  }
 }
 
 export async function setCurrentUser(username: string): Promise<void> {
