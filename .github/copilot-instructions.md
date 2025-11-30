@@ -17,3 +17,9 @@
 - Ensure accessibility (screen readers, touch targets)
 - Optimize images and assets
 - Use environment variables for API keys
+
+## Testing
+- Write unit tests for business logic
+- Use Jest and React Native Testing Library for testing
+- Aim for at least 80% code coverage
+- Do not use react-test-renderer as it is deprecated
