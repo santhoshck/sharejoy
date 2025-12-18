@@ -16,10 +16,5 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
   },
-  content: { width: '100%', maxWidth: 420, alignItems: 'center' },
-  welcome: { fontSize: 20, marginBottom: 12 },
 });
