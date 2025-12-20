@@ -5,13 +5,18 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import Auth from '../auth/Auth';
 import Account from '../auth/Account';
 import Home from '../screens/Home';
+import NgoForm from '../ngo/NgoForm';
+import NgoDetails from '../ngo/NgoDetails';
 import { getCurrentUser, removeCurrentUser } from '../auth/storage';
 import { getInitialUser as _getInitialUser } from './init';
+import { NGO } from '../ngo/types';
 
 type RootStackParamList = {
   Auth: undefined;
   Home: { username: string };
   Account: { username: string };
+  NgoForm: { ngo?: NGO };
+  NgoDetails: { ngo: NGO };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -55,6 +60,8 @@ export default function RootNavigator() {
             <Stack.Screen name="Account">
               {(props) => <Account {...props} username={user} onSignOut={signOut} onDeleted={() => setUser(null)} />}
             </Stack.Screen>
+            <Stack.Screen name="NgoForm" component={NgoForm} />
+            <Stack.Screen name="NgoDetails" component={NgoDetails} />
           </>
         ) : (
           <Stack.Screen name="Auth">

@@ -96,11 +96,18 @@ export default function Account({
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
           <View style={styles.header}>
             <TouchableOpacity
-              onPress={() => navigation.navigate('Home', { username })}
+              onPress={() => {
+                console.log('Back button pressed');
+                navigation.navigate('Home', { username });
+              }}
               style={styles.backButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               <Text style={styles.backButtonText}>← Back</Text>
             </TouchableOpacity>
