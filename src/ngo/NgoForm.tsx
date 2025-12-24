@@ -16,6 +16,7 @@ import { StatusBar } from 'expo-status-bar';
 import { NavigationProp } from '@react-navigation/native';
 import { NGO } from './types';
 import { addNgo, updateNgo } from './storage';
+import { getCurrentUser } from '../auth/storage';
 
 export default function NgoForm({ navigation, route }: { navigation: NavigationProp<any>, route: any }) {
     const existingNgo: NGO | undefined = route.params?.ngo;
@@ -53,10 +54,13 @@ export default function NgoForm({ navigation, route }: { navigation: NavigationP
                     { text: 'OK', onPress: () => navigation.goBack() },
                 ]);
             } else {
+                const currentUser = await getCurrentUser();
                 const newNgo = {
                     id: Date.now().toString(),
                     createdAt: Date.now(),
                     ...form,
+                    status: 'pending' as const,
+                    createdBy: currentUser || 'unknown',
                 };
                 await addNgo(newNgo);
                 Alert.alert('Success', 'NGO added successfully', [

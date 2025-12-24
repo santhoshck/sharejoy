@@ -4,7 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationProp, RouteProp, useFocusEffect } from '@react-navigation/native';
 import { NGO } from './types';
-import { getNgos } from './storage';
+import { getNgos, updateNgo } from './storage';
+import { getUser, UserRole, getCurrentUser } from '../auth/storage';
 
 type RootStackParamList = {
     NgoDetails: { ngo: NGO };
@@ -21,20 +22,38 @@ interface NgoDetailsProps {
 export default function NgoDetails({ navigation, route }: NgoDetailsProps) {
     // Initialize with param, but we might want to refresh from storage if it was edited
     const [ngo, setNgo] = useState<NGO>(route.params.ngo);
+    const [userRole, setUserRole] = useState<UserRole>('user');
 
     // Refresh data when screen comes into focus in case it was edited
     useFocusEffect(
         React.useCallback(() => {
-            const refreshNgo = async () => {
+            const refreshData = async () => {
                 const ngos = await getNgos();
                 const updated = ngos.find(n => n.id === ngo.id);
                 if (updated) {
                     setNgo(updated);
                 }
+                const currentUsername = await getCurrentUser();
+                if (currentUsername) {
+                    const u = await getUser(currentUsername);
+                    if (u) setUserRole(u.role);
+                }
             };
-            refreshNgo();
+            refreshData();
         }, [ngo.id])
     );
+
+    const handleStatusChange = async (status: 'approved' | 'rejected') => {
+        try {
+            const updatedNgo = { ...ngo, status };
+            await updateNgo(updatedNgo);
+            setNgo(updatedNgo);
+            Alert.alert(`NGO ${status === 'approved' ? 'Approved' : 'Rejected'}`);
+            navigation.goBack();
+        } catch (e) {
+            Alert.alert('Error', 'Failed to update status');
+        }
+    };
 
     const handleEdit = () => {
         navigation.navigate('NgoForm', { ngo });
@@ -65,13 +84,30 @@ export default function NgoDetails({ navigation, route }: NgoDetailsProps) {
                     <Text style={styles.backButtonText}>← Back</Text>
                 </TouchableOpacity>
                 <Text style={styles.headerTitle} numberOfLines={1}>{ngo.name}</Text>
-                <TouchableOpacity
-                    onPress={handleEdit}
-                    style={styles.editButton}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                    <Text style={styles.editButtonText}>Edit</Text>
-                </TouchableOpacity>
+                {userRole === 'approver' && ngo.status === 'pending' ? (
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                        <TouchableOpacity
+                            onPress={() => handleStatusChange('rejected')}
+                            style={[styles.actionButton, { backgroundColor: '#fee2e2' }]}
+                        >
+                            <Text style={{ fontSize: 18 }}>✕</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={() => handleStatusChange('approved')}
+                            style={[styles.actionButton, { backgroundColor: '#dcfce7' }]}
+                        >
+                            <Text style={{ fontSize: 18 }}>✓</Text>
+                        </TouchableOpacity>
+                    </View>
+                ) : (
+                    <TouchableOpacity
+                        onPress={handleEdit}
+                        style={styles.editButton}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                        <Text style={styles.editButtonText}>Edit</Text>
+                    </TouchableOpacity>
+                )}
             </View>
 
             <ScrollView contentContainerStyle={styles.content}>
@@ -171,6 +207,13 @@ const styles = StyleSheet.create({
         color: '#6366f1',
         fontWeight: '600',
         fontSize: 16,
+    },
+    actionButton: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     content: {
         padding: 24,

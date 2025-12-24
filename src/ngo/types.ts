@@ -10,4 +10,6 @@ export interface NGO {
     pin: string;
     website: string;
     createdAt: number;
+    status: 'pending' | 'approved' | 'rejected';
+    createdBy?: string;
 }

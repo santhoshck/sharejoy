@@ -1,7 +1,8 @@
 import * as SecureStore from 'expo-secure-store';
 import { verifyPassword, hashPassword, generateSalt } from './crypto';
 
-export type UserRecord = { username: string; salt: string; hash: string };
+export type UserRole = 'user' | 'approver';
+export type UserRecord = { username: string; salt: string; hash: string; role: UserRole };
 
 const USERS_KEY = 'users';
 const CURRENT_USER_KEY = 'currentUser';

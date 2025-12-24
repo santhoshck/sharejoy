@@ -19,6 +19,7 @@ export default function Auth({ onLogin }: { onLogin: (username: string) => void 
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [role, setRole] = useState<'user' | 'approver'>('user');
   const [loading, setLoading] = useState(false);
 
   const clear = () => {
@@ -37,7 +38,7 @@ export default function Auth({ onLogin }: { onLogin: (username: string) => void 
 
       const salt = await generateSalt();
       const hash = hashPassword(password, salt);
-      await addUser({ username, salt, hash });
+      await addUser({ username, salt, hash, role });
       await setCurrentUser(username);
       onLogin(username);
       clear();
@@ -113,6 +114,26 @@ export default function Auth({ onLogin }: { onLogin: (username: string) => void 
                 onChangeText={setPassword}
                 secureTextEntry
               />
+
+              {!isLogin && (
+                <View style={styles.roleContainer}>
+                  <Text style={styles.label}>I am a:</Text>
+                  <View style={styles.roleSelector}>
+                    <TouchableOpacity
+                      style={[styles.roleOption, role === 'user' && styles.roleOptionSelected]}
+                      onPress={() => setRole('user')}
+                    >
+                      <Text style={[styles.roleText, role === 'user' && styles.roleTextSelected]}>User</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.roleOption, role === 'approver' && styles.roleOptionSelected]}
+                      onPress={() => setRole('approver')}
+                    >
+                      <Text style={[styles.roleText, role === 'approver' && styles.roleTextSelected]}>Approver</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
 
               {loading ? (
                 <View style={styles.loaderContainer}>
@@ -272,5 +293,37 @@ const styles = StyleSheet.create({
     color: '#6366f1',
     fontSize: 15,
     fontWeight: '600',
+  },
+  roleContainer: {
+    marginTop: 8,
+  },
+  roleSelector: {
+    flexDirection: 'row',
+    backgroundColor: '#f1f5f9',
+    borderRadius: 12,
+    padding: 4,
+    marginTop: 6,
+  },
+  roleOption: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 10,
+  },
+  roleOptionSelected: {
+    backgroundColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  roleText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  roleTextSelected: {
+    color: '#6366f1',
   },
 });

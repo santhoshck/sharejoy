@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { NavigationProp, useFocusEffect } from '@react-navigation/native';
 import { NGO } from '../ngo/types';
 import { getNgos, deleteNgo } from '../ngo/storage';
+import { getUser, UserRole } from '../auth/storage';
 
 interface HomeProps {
     navigation: NavigationProp<any>;
@@ -14,13 +15,22 @@ export default function Home({ navigation, route }: HomeProps) {
     const { username } = route.params;
     const [ngos, setNgos] = useState<NGO[]>([]);
     const [loading, setLoading] = useState(true);
+    const [userRole, setUserRole] = useState<UserRole>('user');
 
     const fetchNgos = useCallback(async () => {
         setLoading(true);
-        const data = await getNgos();
-        setNgos(data);
+        const [ngoData, userData] = await Promise.all([
+            getNgos(),
+            getUser(username)
+        ]);
+
+        if (userData) {
+            setUserRole(userData.role || 'user');
+        }
+
+        setNgos(ngoData);
         setLoading(false);
-    }, []);
+    }, [username]);
 
     useFocusEffect(
         useCallback(() => {
@@ -52,9 +62,13 @@ export default function Home({ navigation, route }: HomeProps) {
 
             <ScrollView contentContainerStyle={styles.content}>
                 <View style={styles.card}>
-                    <Text style={styles.cardTitle}>Your Dashboard</Text>
+                    <Text style={styles.cardTitle}>
+                        {userRole === 'approver' ? 'Approver Dashboard' : 'Your Dashboard'}
+                    </Text>
                     <Text style={styles.cardText}>
-                        Welcome to ShareJoy! This is your personal space.
+                        {userRole === 'approver'
+                            ? 'Review and approve pending NGO submissions.'
+                            : 'Welcome to ShareJoy! This is your personal space.'}
                     </Text>
                 </View>
 
@@ -85,7 +99,9 @@ export default function Home({ navigation, route }: HomeProps) {
                 </TouchableOpacity>
 
                 <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>My NGOs</Text>
+                    <Text style={styles.sectionTitle}>
+                        {userRole === 'approver' ? 'Pending Approvals' : 'My NGOs'}
+                    </Text>
                 </View>
 
                 {loading ? (
@@ -95,22 +111,46 @@ export default function Home({ navigation, route }: HomeProps) {
                         <Text style={styles.emptyStateText}>No NGOs added yet.</Text>
                     </View>
                 ) : (
-                    ngos.map((ngo) => (
-                        <TouchableOpacity
-                            key={ngo.id}
-                            style={styles.ngoCard}
-                            onPress={() => navigation.navigate('NgoDetails', { ngo })}
-                        >
-                            <View style={styles.ngoCardContent}>
-                                <Text style={styles.ngoName}>{ngo.name}</Text>
-                                <Text style={styles.ngoDetails}>{ngo.address}, {ngo.state}</Text>
-                                <Text style={styles.ngoContact}>Contact: {ngo.contactPerson} ({ngo.phone})</Text>
-                            </View>
-                            <TouchableOpacity onPress={() => handleDelete(ngo.id)} style={styles.deleteButton}>
-                                <Text style={styles.deleteButtonText}>🗑️</Text>
+                    ngos
+                        .filter(ngo => {
+                            if (userRole === 'approver') return ngo.status === 'pending';
+                            return ngo.createdBy === username;
+                        })
+                        .map((ngo) => (
+                            <TouchableOpacity
+                                key={ngo.id}
+                                style={styles.ngoCard}
+                                onPress={() => navigation.navigate('NgoDetails', { ngo })}
+                            >
+                                <View style={styles.ngoCardContent}>
+                                    <Text style={styles.ngoName}>{ngo.name}</Text>
+                                    <View style={styles.statusRow}>
+                                        <Text style={styles.ngoDetails}>{ngo.address}, {ngo.state}</Text>
+                                        <View style={[
+                                            styles.badge,
+                                            userRole === 'approver' ? { backgroundColor: '#fff7ed', borderColor: '#fdba74' } :
+                                                ngo.status === 'approved' ? { backgroundColor: '#dcfce7', borderColor: '#86efac' } :
+                                                    ngo.status === 'rejected' ? { backgroundColor: '#fee2e2', borderColor: '#fca5a5' } :
+                                                        { backgroundColor: '#fff7ed', borderColor: '#fdba74' }
+                                        ]}>
+                                            <Text style={[
+                                                styles.badgeText,
+                                                userRole === 'approver' ? { color: '#c2410c' } :
+                                                    ngo.status === 'approved' ? { color: '#166534' } :
+                                                        ngo.status === 'rejected' ? { color: '#991b1b' } :
+                                                            { color: '#c2410c' }
+                                            ]}>
+                                                {userRole === 'approver' ? 'Pending' : ngo.status.charAt(0).toUpperCase() + ngo.status.slice(1)}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                    <Text style={styles.ngoContact}>Contact: {ngo.contactPerson} ({ngo.phone})</Text>
+                                </View>
+                                <TouchableOpacity onPress={() => handleDelete(ngo.id)} style={styles.deleteButton}>
+                                    <Text style={styles.deleteButtonText}>🗑️</Text>
+                                </TouchableOpacity>
                             </TouchableOpacity>
-                        </TouchableOpacity>
-                    ))
+                        ))
                 )}
             </ScrollView>
         </SafeAreaView>
@@ -259,5 +299,24 @@ const styles = StyleSheet.create({
     },
     deleteButtonText: {
         fontSize: 20,
+    },
+    statusRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 2,
+    },
+    badge: {
+        backgroundColor: '#fff7ed',
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 4,
+        borderWidth: 1,
+        borderColor: '#fdba74',
+    },
+    badgeText: {
+        fontSize: 10,
+        color: '#c2410c',
+        fontWeight: '700',
     },
 });
