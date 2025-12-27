@@ -16,15 +16,39 @@ export async function getUser(username: string): Promise<UserRecord | null> {
 }
 
 export async function getProfileById(id: string): Promise<UserRecord | null> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', id)
-    .single();
+  const timeout = (ms: number) => new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), ms));
 
-  if (error || !data) return null;
-  return data as UserRecord;
+  try {
+    console.log('[Storage] getProfileById for:', id);
+
+    // Race the supabase query against a 5-second timeout
+    const { data, error } = await Promise.race([
+      supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', id)
+        .single(),
+      timeout(5000)
+    ]) as any;
+
+    if (error) {
+      console.warn('[Storage] getProfileById error:', error.message);
+      return null;
+    }
+
+    console.log('[Storage] getProfileById success:', data?.username);
+    return data as UserRecord;
+  } catch (e: any) {
+    if (e.message === 'TIMEOUT') {
+      console.error('[Storage] getProfileById timed out after 5s');
+    } else {
+      console.error('[Storage] getProfileById exception:', e);
+    }
+    return null;
+  }
 }
+
+
 
 export async function getCurrentUser(): Promise<string | null> {
   // Return the username of the currently logged in user

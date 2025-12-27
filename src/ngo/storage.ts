@@ -34,19 +34,32 @@ const mapToDb = (ngo: Partial<NGO>) => ({
 });
 
 export const getNgos = async (): Promise<NGO[]> => {
+    const timeout = (ms: number) => new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), ms));
+
     try {
-        const { data, error } = await supabase
-            .from('ngos')
-            .select('*')
-            .order('created_at', { ascending: false });
+        console.log('[Storage] getNgos fetching...');
+
+        const { data, error } = await Promise.race([
+            supabase
+                .from('ngos')
+                .select('*')
+                .order('created_at', { ascending: false }),
+            timeout(5000)
+        ]) as any;
 
         if (error) throw error;
+        console.log('[Storage] getNgos success, count:', data?.length);
         return (data || []).map(mapFromDb);
-    } catch (e) {
-        console.warn('Failed to load NGOs from Supabase', e);
+    } catch (e: any) {
+        if (e.message === 'TIMEOUT') {
+            console.warn('[Storage] getNgos timed out after 5s');
+        } else {
+            console.warn('[Storage] Failed to load NGOs from Supabase', e);
+        }
         return [];
     }
 };
+
 
 export const addNgo = async (ngo: Partial<NGO>): Promise<void> => {
     try {

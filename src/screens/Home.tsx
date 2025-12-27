@@ -13,7 +13,9 @@ interface HomeProps {
 }
 
 export default function Home({ navigation, route }: HomeProps) {
+    console.log('[Home] Rendering...');
     const [username, setUsername] = useState(route.params?.username || '');
+
     const [currentUserId, setCurrentUserIdState] = useState<string | null>(null);
     const [ngos, setNgos] = useState<NGO[]>([]);
     const [loading, setLoading] = useState(true);
@@ -22,31 +24,43 @@ export default function Home({ navigation, route }: HomeProps) {
     const fetchNgos = useCallback(async () => {
         setLoading(true);
         try {
+            console.log('[Home] fetchNgos starting...');
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) {
+                console.log('[Home] No session, skipping fetch');
                 return;
             }
 
             const userId = session.user.id;
             setCurrentUserIdState(userId);
 
-            const [ngoData, profileData] = await Promise.all([
-                getNgos(),
-                getProfileById(userId)
-            ]);
+            // Fetch NGOs
+            const ngoData = await getNgos();
+            setNgos(ngoData);
 
-            if (profileData) {
-                setUserRole(profileData.role || 'user');
-                setUsername(profileData.username);
+            // Only fetch profile if we don't have a username yet
+            // or if we need the role (standard case)
+            if (!username || userRole === 'user') {
+                console.log('[Home] Fetching profile for role/username update');
+                const profileData = await getProfileById(userId);
+                if (profileData) {
+                    setUserRole(profileData.role || 'user');
+                    if (profileData.username && profileData.username !== username) {
+                        setUsername(profileData.username);
+                    }
+                }
+            } else {
+                console.log('[Home] Using existing username/role, skipping profile fetch');
             }
 
-            setNgos(ngoData);
         } catch (e) {
             console.error('Fetch home data error:', e);
         } finally {
+            console.log('[Home] Loading complete');
             setLoading(false);
         }
-    }, [navigation]);
+    }, [navigation, username, userRole]);
+
 
     useFocusEffect(
         useCallback(() => {

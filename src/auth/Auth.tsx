@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { StatusBar } from 'expo-status-bar';
+import { getProfileById } from './storage';
 
 export default function Auth({ onLogin }: { onLogin: (username: string) => void }) {
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -27,39 +28,41 @@ export default function Auth({ onLogin }: { onLogin: (username: string) => void 
   };
 
   const handleRegister = async () => {
-    if (!email || !username || !password) {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail || !username || !password) {
       return Alert.alert('Missing Fields', 'Please fill email, username and password');
     }
     setLoading(true);
     try {
+      console.log('[Auth] Attempting sign up for:', trimmedEmail);
       // 1. Sign up user via Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
+        email: trimmedEmail,
         password,
       });
 
       if (authError) throw authError;
 
       if (authData.user) {
+        console.log('[Auth] Sign up successful, user ID:', authData.user.id);
         // 2. Create the associated profile
         const { error: profileError } = await supabase
           .from('profiles')
           .insert({
             id: authData.user.id,
-            username,
+            username: username.trim(),
             role,
           });
 
         if (profileError) throw profileError;
+        console.log('[Auth] Profile created successfully');
 
-        Alert.alert('Success', 'Check your email for confirmation!');
-        // For development/demo purposes we might navigate directly if email confirmation is off,
-        // but let's assume standard flow.
+        Alert.alert('Success', 'Check your email for confirmation (if required)!');
         onLogin(username);
       }
       clear();
     } catch (e: any) {
-      console.warn('Register error', e);
+      console.error('[Auth] Register error:', e);
       Alert.alert('Register failed', e.message || String(e));
     } finally {
       setLoading(false);
@@ -67,36 +70,42 @@ export default function Auth({ onLogin }: { onLogin: (username: string) => void 
   };
 
   const handleLogin = async () => {
-    if (!email || !password) return Alert.alert('Missing Fields', 'Please fill email and password');
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail || !password) return Alert.alert('Missing Fields', 'Please fill email and password');
     setLoading(true);
     try {
+      console.log('[Auth] Attempting login for:', trimmedEmail);
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email,
+        email: trimmedEmail,
         password,
       });
 
-      if (authError) throw authError;
+      if (authError) {
+        console.error('[Auth] Login error details:', authError);
+        throw authError;
+      }
 
       if (authData.user) {
-        // Fetch profile to get username
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('username')
-          .eq('id', authData.user.id)
-          .single();
+        console.log('[Auth] Login success, user ID:', authData.user.id);
 
-        if (profileError) throw profileError;
-
-        onLogin(profile.username);
+        // Instant Transition: Use email prefix as temporary username
+        // Home screen will fetch the actual profile in the background.
+        const tempUsername = trimmedEmail.split('@')[0];
+        console.log('[Auth] Instant redirect to Home with temp username:', tempUsername);
+        onLogin(tempUsername);
       }
       clear();
+
+
     } catch (e: any) {
-      console.warn('Login error', e);
+      console.error('[Auth] Login error:', e);
       Alert.alert('Login failed', e.message || String(e));
     } finally {
       setLoading(false);
     }
   };
+
+
 
   const isLogin = mode === 'login';
 
