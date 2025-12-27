@@ -16,7 +16,7 @@ import { StatusBar } from 'expo-status-bar';
 import { NavigationProp } from '@react-navigation/native';
 import { NGO } from './types';
 import { addNgo, updateNgo } from './storage';
-import { getCurrentUser } from '../auth/storage';
+import { getCurrentUserId } from '../auth/storage';
 
 export default function NgoForm({ navigation, route }: { navigation: NavigationProp<any>, route: any }) {
     const existingNgo: NGO | undefined = route.params?.ngo;
@@ -45,7 +45,7 @@ export default function NgoForm({ navigation, route }: { navigation: NavigationP
         setLoading(true);
         try {
             if (existingNgo) {
-                const updatedNgo = {
+                const updatedNgo: NGO = {
                     ...existingNgo,
                     ...form,
                 };
@@ -54,25 +54,26 @@ export default function NgoForm({ navigation, route }: { navigation: NavigationP
                     { text: 'OK', onPress: () => navigation.goBack() },
                 ]);
             } else {
-                const currentUser = await getCurrentUser();
-                const newNgo = {
-                    id: Date.now().toString(),
-                    createdAt: Date.now(),
+                const currentUserId = await getCurrentUserId();
+                if (!currentUserId) throw new Error('Not authenticated');
+
+                await addNgo({
                     ...form,
-                    status: 'pending' as const,
-                    createdBy: currentUser || 'unknown',
-                };
-                await addNgo(newNgo);
+                    createdBy: currentUserId,
+                });
+
                 Alert.alert('Success', 'NGO added successfully', [
                     { text: 'OK', onPress: () => navigation.goBack() },
                 ]);
             }
-        } catch (e) {
-            Alert.alert('Error', 'Failed to save NGO');
+        } catch (e: any) {
+            console.warn('Error saving NGO:', e);
+            Alert.alert('Error', e.message || 'Failed to save NGO');
         } finally {
             setLoading(false);
         }
     };
+
 
     return (
         <SafeAreaView style={styles.container}>

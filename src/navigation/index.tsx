@@ -7,7 +7,7 @@ import Account from '../auth/Account';
 import Home from '../screens/Home';
 import NgoForm from '../ngo/NgoForm';
 import NgoDetails from '../ngo/NgoDetails';
-import { getCurrentUser, removeCurrentUser } from '../auth/storage';
+// Migrated to Supabase Auth directly in navigator
 import { getInitialUser as _getInitialUser } from './init';
 import { NGO } from '../ngo/types';
 
@@ -21,27 +21,37 @@ type RootStackParamList = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
+import { supabase } from '../lib/supabase';
+import { getProfileById } from '../auth/storage';
+
 export default function RootNavigator() {
   const [user, setUser] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const u = await getCurrentUser();
-        setUser(u);
-      } catch (e) {
-        console.warn(e);
-      } finally {
-        setLoading(false);
+    // 1. Check initial session
+    const checkInitialSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const profile = await getProfileById(session.user.id);
+        setUser(profile?.username || null);
       }
-    })();
-  }, []);
+      setLoading(false);
+    };
+    checkInitialSession();
 
-  const signOut = async () => {
-    await removeCurrentUser();
-    setUser(null);
-  };
+    // 2. Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session) {
+        const profile = await getProfileById(session.user.id);
+        setUser(profile?.username || null);
+      } else {
+        setUser(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   if (loading) {
     return (
@@ -58,7 +68,7 @@ export default function RootNavigator() {
           <>
             <Stack.Screen name="Home" component={Home} initialParams={{ username: user }} />
             <Stack.Screen name="Account">
-              {(props) => <Account {...props} username={user} onSignOut={signOut} onDeleted={() => setUser(null)} />}
+              {(props) => <Account {...props} username={user} onDeleted={() => setUser(null)} />}
             </Stack.Screen>
             <Stack.Screen name="NgoForm" component={NgoForm} />
             <Stack.Screen name="NgoDetails" component={NgoDetails} />
@@ -79,6 +89,6 @@ export default function RootNavigator() {
   );
 }
 
-// helper for tests / other modules: get the initial current user
 // Re-export helper for backwards compatibility
 export const getInitialUser = _getInitialUser;
+

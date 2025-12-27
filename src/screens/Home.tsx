@@ -4,33 +4,49 @@ import { StatusBar } from 'expo-status-bar';
 import { NavigationProp, useFocusEffect } from '@react-navigation/native';
 import { NGO } from '../ngo/types';
 import { getNgos, deleteNgo } from '../ngo/storage';
-import { getUser, UserRole } from '../auth/storage';
+import { getProfileById, getCurrentUser, getCurrentUserId, UserRole } from '../auth/storage';
+import { supabase } from '../lib/supabase';
 
 interface HomeProps {
     navigation: NavigationProp<any>;
-    route: { params: { username: string } };
+    route: { params?: { username: string } };
 }
 
 export default function Home({ navigation, route }: HomeProps) {
-    const { username } = route.params;
+    const [username, setUsername] = useState(route.params?.username || '');
+    const [currentUserId, setCurrentUserIdState] = useState<string | null>(null);
     const [ngos, setNgos] = useState<NGO[]>([]);
     const [loading, setLoading] = useState(true);
     const [userRole, setUserRole] = useState<UserRole>('user');
 
     const fetchNgos = useCallback(async () => {
         setLoading(true);
-        const [ngoData, userData] = await Promise.all([
-            getNgos(),
-            getUser(username)
-        ]);
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                return;
+            }
 
-        if (userData) {
-            setUserRole(userData.role || 'user');
+            const userId = session.user.id;
+            setCurrentUserIdState(userId);
+
+            const [ngoData, profileData] = await Promise.all([
+                getNgos(),
+                getProfileById(userId)
+            ]);
+
+            if (profileData) {
+                setUserRole(profileData.role || 'user');
+                setUsername(profileData.username);
+            }
+
+            setNgos(ngoData);
+        } catch (e) {
+            console.error('Fetch home data error:', e);
+        } finally {
+            setLoading(false);
         }
-
-        setNgos(ngoData);
-        setLoading(false);
-    }, [username]);
+    }, [navigation]);
 
     useFocusEffect(
         useCallback(() => {
@@ -52,12 +68,29 @@ export default function Home({ navigation, route }: HomeProps) {
         ]);
     };
 
+    const filteredNgos = ngos.filter(ngo => {
+        if (userRole === 'approver') return ngo.status === 'pending';
+        return ngo.createdBy === currentUserId;
+    });
+
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar style="dark" />
             <View style={styles.header}>
-                <Text style={styles.greeting}>Hello,</Text>
-                <Text style={styles.username}>{username}</Text>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <View>
+                        <Text style={styles.greeting}>Hello,</Text>
+                        <Text style={styles.username}>{username}</Text>
+                    </View>
+                    <TouchableOpacity
+                        onPress={async () => {
+                            await supabase.auth.signOut();
+                        }}
+                        style={{ padding: 8 }}
+                    >
+                        <Text style={{ color: '#6366f1', fontWeight: '600' }}>Logout</Text>
+                    </TouchableOpacity>
+                </View>
             </View>
 
             <ScrollView contentContainerStyle={styles.content}>
@@ -105,52 +138,49 @@ export default function Home({ navigation, route }: HomeProps) {
                 </View>
 
                 {loading ? (
-                    <ActivityIndicator color="#6366f1" />
-                ) : ngos.length === 0 ? (
+                    <ActivityIndicator color="#6366f1" size="large" style={{ marginTop: 20 }} />
+                ) : filteredNgos.length === 0 ? (
                     <View style={styles.emptyState}>
-                        <Text style={styles.emptyStateText}>No NGOs added yet.</Text>
+                        <Text style={styles.emptyStateText}>
+                            {userRole === 'approver' ? 'No pending approvals.' : 'You haven’t added any NGOs yet.'}
+                        </Text>
                     </View>
                 ) : (
-                    ngos
-                        .filter(ngo => {
-                            if (userRole === 'approver') return ngo.status === 'pending';
-                            return ngo.createdBy === username;
-                        })
-                        .map((ngo) => (
-                            <TouchableOpacity
-                                key={ngo.id}
-                                style={styles.ngoCard}
-                                onPress={() => navigation.navigate('NgoDetails', { ngo })}
-                            >
-                                <View style={styles.ngoCardContent}>
-                                    <Text style={styles.ngoName}>{ngo.name}</Text>
-                                    <View style={styles.statusRow}>
-                                        <Text style={styles.ngoDetails}>{ngo.address}, {ngo.state}</Text>
-                                        <View style={[
-                                            styles.badge,
-                                            userRole === 'approver' ? { backgroundColor: '#fff7ed', borderColor: '#fdba74' } :
-                                                ngo.status === 'approved' ? { backgroundColor: '#dcfce7', borderColor: '#86efac' } :
-                                                    ngo.status === 'rejected' ? { backgroundColor: '#fee2e2', borderColor: '#fca5a5' } :
-                                                        { backgroundColor: '#fff7ed', borderColor: '#fdba74' }
+                    filteredNgos.map((ngo) => (
+                        <TouchableOpacity
+                            key={ngo.id}
+                            style={styles.ngoCard}
+                            onPress={() => navigation.navigate('NgoDetails', { ngo })}
+                        >
+                            <View style={styles.ngoCardContent}>
+                                <Text style={styles.ngoName}>{ngo.name}</Text>
+                                <View style={styles.statusRow}>
+                                    <Text style={styles.ngoDetails}>{ngo.address}, {ngo.state}</Text>
+                                    <View style={[
+                                        styles.badge,
+                                        userRole === 'approver' ? { backgroundColor: '#fff7ed', borderColor: '#fdba74' } :
+                                            ngo.status === 'approved' ? { backgroundColor: '#dcfce7', borderColor: '#86efac' } :
+                                                ngo.status === 'rejected' ? { backgroundColor: '#fee2e2', borderColor: '#fca5a5' } :
+                                                    { backgroundColor: '#fff7ed', borderColor: '#fdba74' }
+                                    ]}>
+                                        <Text style={[
+                                            styles.badgeText,
+                                            userRole === 'approver' ? { color: '#c2410c' } :
+                                                ngo.status === 'approved' ? { color: '#166534' } :
+                                                    ngo.status === 'rejected' ? { color: '#991b1b' } :
+                                                        { color: '#c2410c' }
                                         ]}>
-                                            <Text style={[
-                                                styles.badgeText,
-                                                userRole === 'approver' ? { color: '#c2410c' } :
-                                                    ngo.status === 'approved' ? { color: '#166534' } :
-                                                        ngo.status === 'rejected' ? { color: '#991b1b' } :
-                                                            { color: '#c2410c' }
-                                            ]}>
-                                                {userRole === 'approver' ? 'Pending' : ngo.status.charAt(0).toUpperCase() + ngo.status.slice(1)}
-                                            </Text>
-                                        </View>
+                                            {userRole === 'approver' ? 'Pending' : ngo.status.charAt(0).toUpperCase() + ngo.status.slice(1)}
+                                        </Text>
                                     </View>
-                                    <Text style={styles.ngoContact}>Contact: {ngo.contactPerson} ({ngo.phone})</Text>
                                 </View>
-                                <TouchableOpacity onPress={() => handleDelete(ngo.id)} style={styles.deleteButton}>
-                                    <Text style={styles.deleteButtonText}>🗑️</Text>
-                                </TouchableOpacity>
+                                <Text style={styles.ngoContact}>Contact: {ngo.contactPerson} ({ngo.phone})</Text>
+                            </View>
+                            <TouchableOpacity onPress={() => handleDelete(ngo.id)} style={styles.deleteButton}>
+                                <Text style={styles.deleteButtonText}>🗑️</Text>
                             </TouchableOpacity>
-                        ))
+                        </TouchableOpacity>
+                    ))
                 )}
             </ScrollView>
         </SafeAreaView>

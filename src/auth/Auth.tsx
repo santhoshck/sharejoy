@@ -11,12 +11,12 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
-import { getUser, addUser, setCurrentUser } from './storage';
-import { generateSalt, hashPassword, verifyPassword } from './crypto';
+import { supabase } from '../lib/supabase';
 import { StatusBar } from 'expo-status-bar';
 
 export default function Auth({ onLogin }: { onLogin: (username: string) => void }) {
   const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'user' | 'approver'>('user');
@@ -27,51 +27,72 @@ export default function Auth({ onLogin }: { onLogin: (username: string) => void 
   };
 
   const handleRegister = async () => {
-    if (!username || !password) return Alert.alert('Missing Fields', 'Please fill username and password');
+    if (!email || !username || !password) {
+      return Alert.alert('Missing Fields', 'Please fill email, username and password');
+    }
     setLoading(true);
     try {
-      const existing = await getUser(username);
-      if (existing) {
-        setLoading(false);
-        return Alert.alert('User exists', 'Choose a different username or log in.');
-      }
+      // 1. Sign up user via Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+      });
 
-      const salt = await generateSalt();
-      const hash = hashPassword(password, salt);
-      await addUser({ username, salt, hash, role });
-      await setCurrentUser(username);
-      onLogin(username);
+      if (authError) throw authError;
+
+      if (authData.user) {
+        // 2. Create the associated profile
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .insert({
+            id: authData.user.id,
+            username,
+            role,
+          });
+
+        if (profileError) throw profileError;
+
+        Alert.alert('Success', 'Check your email for confirmation!');
+        // For development/demo purposes we might navigate directly if email confirmation is off,
+        // but let's assume standard flow.
+        onLogin(username);
+      }
       clear();
-    } catch (e) {
+    } catch (e: any) {
       console.warn('Register error', e);
-      const message = e instanceof Error ? e.message : String(e);
-      Alert.alert('Register failed', message);
+      Alert.alert('Register failed', e.message || String(e));
     } finally {
       setLoading(false);
     }
   };
 
   const handleLogin = async () => {
-    if (!username || !password) return Alert.alert('Missing Fields', 'Please fill username and password');
+    if (!email || !password) return Alert.alert('Missing Fields', 'Please fill email and password');
     setLoading(true);
     try {
-      const u = await getUser(username);
-      if (!u) {
-        setLoading(false);
-        return Alert.alert('Account not found', 'No user found with that username.');
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (authError) throw authError;
+
+      if (authData.user) {
+        // Fetch profile to get username
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('username')
+          .eq('id', authData.user.id)
+          .single();
+
+        if (profileError) throw profileError;
+
+        onLogin(profile.username);
       }
-      const ok = verifyPassword(password, u.salt, u.hash);
-      if (!ok) {
-        setLoading(false);
-        return Alert.alert('Authentication Failed', 'Invalid credentials.');
-      }
-      await setCurrentUser(username);
-      onLogin(username);
       clear();
-    } catch (e) {
+    } catch (e: any) {
       console.warn('Login error', e);
-      const message = e instanceof Error ? e.message : String(e);
-      Alert.alert('Login failed', message);
+      Alert.alert('Login failed', e.message || String(e));
     } finally {
       setLoading(false);
     }
@@ -94,16 +115,32 @@ export default function Auth({ onLogin }: { onLogin: (username: string) => void 
             </View>
 
             <View style={styles.form}>
-              <Text style={styles.label}>Username</Text>
+              <Text style={styles.label}>Email</Text>
               <TextInput
                 style={styles.input}
-                placeholder="Enter your username"
+                placeholder="Enter your email"
                 placeholderTextColor="#999"
-                value={username}
-                onChangeText={setUsername}
+                value={email}
+                onChangeText={setEmail}
                 autoCapitalize="none"
                 autoCorrect={false}
+                keyboardType="email-address"
               />
+
+              {!isLogin && (
+                <>
+                  <Text style={styles.label}>Username</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Choose a username"
+                    placeholderTextColor="#999"
+                    value={username}
+                    onChangeText={setUsername}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                </>
+              )}
 
               <Text style={styles.label}>Password</Text>
               <TextInput
@@ -327,3 +364,4 @@ const styles = StyleSheet.create({
     color: '#6366f1',
   },
 });
+

@@ -9,7 +9,7 @@ export interface NGO {
     state: string;
     pin: string;
     website: string;
-    createdAt: number;
+    createdAt: string;
     status: 'pending' | 'approved' | 'rejected';
-    createdBy?: string;
+    createdBy: string;
 }

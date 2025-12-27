@@ -1,77 +1,46 @@
-import * as SecureStore from 'expo-secure-store';
-import { verifyPassword, hashPassword, generateSalt } from './crypto';
+import { supabase } from '../lib/supabase';
 
 export type UserRole = 'user' | 'approver';
-export type UserRecord = { username: string; salt: string; hash: string; role: UserRole };
-
-const USERS_KEY = 'users';
-const CURRENT_USER_KEY = 'currentUser';
-
-export async function getUsers(): Promise<Record<string, UserRecord>> {
-  try {
-    const raw = await SecureStore.getItemAsync(USERS_KEY);
-    if (!raw) return {};
-    return JSON.parse(raw) as Record<string, UserRecord>;
-  } catch (e) {
-    console.warn('getUsers error', e);
-    return {};
-  }
-}
-
-export async function saveUsers(users: Record<string, UserRecord>): Promise<void> {
-  await SecureStore.setItemAsync(USERS_KEY, JSON.stringify(users));
-}
-
-export async function addUser(user: UserRecord): Promise<void> {
-  const users = await getUsers();
-  users[user.username] = user;
-  await saveUsers(users);
-}
+export type UserRecord = { id: string; username: string; role: UserRole };
 
 export async function getUser(username: string): Promise<UserRecord | null> {
-  const users = await getUsers();
-  return users[username] ?? null;
+  // We fetch by username from profiles table
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('username', username)
+    .single();
+
+  if (error || !data) return null;
+  return data as UserRecord;
 }
 
-export async function updateUser(user: UserRecord): Promise<void> {
-  const users = await getUsers();
-  users[user.username] = user;
-  await saveUsers(users);
-}
+export async function getProfileById(id: string): Promise<UserRecord | null> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', id)
+    .single();
 
-// change user's password after verifying currentPassword; throws on failure
-export async function changeUserPassword(username: string, currentPassword: string, newPassword: string): Promise<void> {
-  const user = await getUser(username);
-  if (!user) throw new Error('User not found');
-  const ok = verifyPassword(currentPassword, user.salt, user.hash);
-  if (!ok) throw new Error('Current password incorrect');
-  const newSalt = await generateSalt();
-  const newHash = hashPassword(newPassword, newSalt);
-  user.salt = newSalt;
-  user.hash = newHash;
-  await updateUser(user);
-}
-
-export async function deleteUser(username: string): Promise<void> {
-  const users = await getUsers();
-  if (users[username]) {
-    delete users[username];
-    await saveUsers(users);
-  }
-  const current = await getCurrentUser();
-  if (current === username) {
-    await removeCurrentUser();
-  }
-}
-
-export async function setCurrentUser(username: string): Promise<void> {
-  await SecureStore.setItemAsync(CURRENT_USER_KEY, username);
+  if (error || !data) return null;
+  return data as UserRecord;
 }
 
 export async function getCurrentUser(): Promise<string | null> {
-  return SecureStore.getItemAsync(CURRENT_USER_KEY);
+  // Return the username of the currently logged in user
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return null;
+
+  const profile = await getProfileById(session.user.id);
+  return profile?.username || null;
+}
+
+export async function getCurrentUserId(): Promise<string | null> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.user.id || null;
 }
 
 export async function removeCurrentUser(): Promise<void> {
-  await SecureStore.deleteItemAsync(CURRENT_USER_KEY);
+  await supabase.auth.signOut();
 }
+

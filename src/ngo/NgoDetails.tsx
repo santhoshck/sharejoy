@@ -5,7 +5,8 @@ import { StatusBar } from 'expo-status-bar';
 import { NavigationProp, RouteProp, useFocusEffect } from '@react-navigation/native';
 import { NGO } from './types';
 import { getNgos, updateNgo } from './storage';
-import { getUser, UserRole, getCurrentUser } from '../auth/storage';
+import { getProfileById, UserRole } from '../auth/storage';
+import { supabase } from '../lib/supabase';
 
 type RootStackParamList = {
     NgoDetails: { ngo: NGO };
@@ -28,20 +29,21 @@ export default function NgoDetails({ navigation, route }: NgoDetailsProps) {
     useFocusEffect(
         React.useCallback(() => {
             const refreshData = async () => {
-                const ngos = await getNgos();
-                const updated = ngos.find(n => n.id === ngo.id);
+                const ngosArr = await getNgos();
+                const updated = ngosArr.find(n => n.id === ngo.id);
                 if (updated) {
                     setNgo(updated);
                 }
-                const currentUsername = await getCurrentUser();
-                if (currentUsername) {
-                    const u = await getUser(currentUsername);
-                    if (u) setUserRole(u.role);
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session) {
+                    const profile = await getProfileById(session.user.id);
+                    if (profile) setUserRole(profile.role);
                 }
             };
             refreshData();
         }, [ngo.id])
     );
+
 
     const handleStatusChange = async (status: 'approved' | 'rejected') => {
         try {
